@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+# ---------------------------------------------------------------------------
+# regexes
+# ---------------------------------------------------------------------------
+
+RE_NS='(?xs)
+   ^\s*
+   (?<ns_decl>\(ns\s+                           # group #1: ns declaration
+     (?<name>[-\.\p{L}0-9]+)\s*                 # group #2: name
+     (?<refs>(?:                                # group #3: references
+       \(\s*\:
+         ((?:(?>[^][()]+)|[[(](?-1)[])])+)      # group #4: .+ (match parens)
+       \)\s*
+     )*)                                        # close group #3
+   \))                                          # close group #1
+'
+
+RE_REFERENCE='(?xs)
+  (?<ref>                                       # group #1: reference
+    \(\s*\:(?:require|use)\s+
+    ((?:(?>[^][()]+)|[[(](?-1)[])])+)           # group #2: .+ (match parens)
+    \)
+  )                                             # close group #1
+'
+
+RE_LIBSPEC_OR_PREFIX_LIST='(?xs)
+  (?<libspec>                                   # group #1: libspec
+    \[\s*
+      ([-\.\p{L}0-9]+)                          # group #2: lib name inside vector with options
+      (?:
+        \s+\:(?:as|exclude|only|rename|refer)
+        ((?:(?>[^][()]+)|[[(](?-1)[])])+)       # group #3: .+ (match parens)
+      )?
+    \]
+    |
+    ([-\.\p{L}0-9]+)                            # group #4: lib name
+  )                                             # close group #1
+  |
+  (?<prefix_list>[[(]                           # group #5: prefix list
+    ((?:(?>[^][()]+)|[[(](?-1)[])])+)           # group #6: .+ (match parens)
+  [])])                                         # close group #5
+'
+
+RE_PREFIX_LIST='(?xs)
+  (?<prefix_list>[[(]                           # group #1: prefix list
+    (?<prefix>[-\.\p{L}0-9]+)\s+                # group #2: prefix
+    ((?:(?>[^][()]+)|[[(](?-1)[])])+)           # group #3: .+ (match parens)
+  [])])                                         # close group #1
+'
+
+# ---------------------------------------------------------------------------
+# helper functions
+# ---------------------------------------------------------------------------
+
+re_capture() {
+	local regex=$1
+	local replace=$2
+	perl -le "print \"$replace\" if join('',<>) =~ /$regex/"
+}
+
+re_capture_all() {
+	local regex=$1
+	local replace=$2
+	perl -le "\$x = join('',<>); print \"$replace\" while \$x =~ /$regex/g"
+}
+
+parse_lib_list() {
+	local lib_list=$1
+	local prefix=$2
+	echo $lib_list | re_capture_all "$RE_LIBSPEC_OR_PREFIX_LIST" '$2$4' \
+	               | grep -v '^$' \
+	               | sed -e "s/^/$prefix/"
+	echo $lib_list | re_capture_all "$RE_LIBSPEC_OR_PREFIX_LIST" '$+{prefix_list}' \
+	               | grep -v '^$' \
+	               | while read prefix_list; do
+		parse_lib_list "$( echo $prefix_list | re_capture "$RE_PREFIX_LIST" '$3' )" \
+		               "$prefix$( echo $prefix_list | re_capture "$RE_PREFIX_LIST" '$+{prefix}' )."
+	done
+}
+
+tac() {
+	awk '{print NR,$0}' | sort -nr | sed 's/^[0-9]* //'
+}
+
+# ---------------------------------------------------------------------------
+
+declare -A NS_TO_FILE
+DEPS=()
+
+for file; do
+	ns_decl=$( cat "$file" | re_capture "$RE_NS" '$+{ns_decl}')
+	name=$( echo "$ns_decl" | re_capture "$RE_NS" '$+{name}')
+	deps=$( parse_lib_list "$( echo $ns_decl | re_capture "$RE_NS" '$+{refs}' \
+	                                         | re_capture_all "$RE_REFERENCE" '$2' )" )
+	NS_TO_FILE[$name]=$file
+	DEPS+=( "$name cljc.core" )
+	for dep in $deps; do
+		DEPS+=( "$name $dep" )
+	done
+done
+
+for ns in $( printf '%s\n' "${DEPS[@]}" | tsort | tac ); do
+	echo ${NS_TO_FILE[$ns]}
+done

@@ -1,0 +1,18 @@
+#!/bin/sh
+
+PROJECT_HOME=$(cd $(dirname "$0")/.. && pwd)
+CLOJUREC_HOME="$PROJECT_HOME/.lein-git-deps/clojurec"
+TMP_DIR="$PROJECT_HOME/target/_clojurec"
+
+NAMESPACE=$1
+SRC_FILE="$PROJECT_HOME/$2/${NAMESPACE//.//}.cljc"
+TARGET_FILE="$PROJECT_HOME/$3/${NAMESPACE//.//}.c"
+TMP_FILE="$TMP_DIR/${NAMESPACE//./_DOT_}.c"
+EXPORT_FILE="$TMP_DIR/${NAMESPACE//./_DOT_}-exports.clj"
+
+rm -f $EXPORT_FILE
+mkdir -p $TMP_DIR
+cd $CLOJUREC_HOME
+lein run -c $SRC_FILE $NAMESPACE $TMP_DIR $TMP_DIR
+mkdir -p $(dirname $TARGET_FILE)
+mv $TMP_FILE $TARGET_FILE

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 PROJECT_HOME=$(cd $(dirname "$0")/.. && pwd)
 CLOJUREC_HOME="$PROJECT_HOME/.lein-git-deps/clojurec"

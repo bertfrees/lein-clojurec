@@ -31,7 +31,7 @@ clean :
 
 $(EXEC) : $(TARGET_O_DIR)/_runtime.o $(TARGET_O_DIR)/cljc/core.o $(O) $(TARGET_O_DIR)/_main.o
 	mkdir -p $(dir $@)
-	$(CC) $(LIBS) $^ -o $@
+	$(CC) $^ $(LIBS) -o $@
 
 $(O_FROM_C_SRC) : $(TARGET_O_DIR)/%.o : $(SRC_C_DIR)/%.c
 	mkdir -p $(dir $@)
